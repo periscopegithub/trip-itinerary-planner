@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/generate-day-summary.js": {
+      "maxDuration": 30
+    }
+  }
+}

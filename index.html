@@ -82,6 +82,36 @@ body {
 .day-header .day-weekday { color: var(--text-secondary); font-size: 0.85rem; }
 .day-header .btn-icon { margin-left: auto; }
 
+/* Day summary */
+.day-summary {
+  margin: 0 12px 12px; padding: 14px;
+  background: linear-gradient(135deg, #f0f4ff, #f8faff);
+  border-left: 4px solid var(--accent); border-radius: 0 6px 6px 0;
+}
+.day-summary .summary-theme {
+  font-size: 0.95rem; font-weight: 700; color: var(--accent); margin-bottom: 6px;
+}
+.day-summary .summary-highlights {
+  list-style: none; padding: 0; margin: 0;
+}
+.day-summary .summary-highlights li {
+  font-size: 0.85rem; color: var(--text-secondary); padding: 2px 0;
+}
+.day-summary .summary-highlights li::before { content: "✦ "; color: var(--accent); }
+.summary-actions { margin-top: 8px; display: flex; gap: 6px; }
+
+/* Generate button */
+.btn-gen { font-size: 0.78rem; padding: 3px 10px; white-space: nowrap; }
+.btn-gen:disabled { opacity: 0.6; cursor: wait; }
+
+/* Loading spinner */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc;
+  border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite;
+  vertical-align: middle; margin-right: 4px;
+}
+
 /* Itinerary list within a day */
 .itinerary-list { padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; min-height: 20px; }
 
@@ -460,6 +490,17 @@ function renderDay(day, index) {
     ? items.map(item => renderItineraryItem(item, day.id)).join('')
     : `<div class="empty-state">No itinerary items yet — click "Add Itinerary" below</div>`;
 
+  const summaryHtml = day.summary ? `
+    <div class="day-summary" id="summary-${day.id}">
+      <div class="summary-theme">${escHtml(day.summary.theme)}</div>
+      <ul class="summary-highlights">
+        ${day.summary.highlights.map(h => `<li>${escHtml(h)}</li>`).join('')}
+      </ul>
+      <div class="summary-actions">
+        <button class="btn btn-sm btn-gen" onclick="generateDaySummary('${day.id}')">Regenerate</button>
+      </div>
+    </div>` : `<div id="summary-${day.id}"></div>`;
+
   return `
     <div class="day-card" data-id="${day.id}">
       <div class="day-header">
@@ -467,6 +508,7 @@ function renderDay(day, index) {
         <span class="day-label">Day ${index + 1}</span>
         <input type="date" value="${day.date}" onchange="onDayDateChange('${day.id}', this.value)" title="Change date">
         <span class="day-weekday">${formatDate(day.date)}</span>
+        <button class="btn btn-sm btn-gen" onclick="generateDaySummary('${day.id}')">${day.summary ? 'Regen' : 'Generate'} Summary</button>
         ${state.trip.days.length > 1 ? `<button class="btn-icon btn-sm" title="Delete day" style="color:var(--danger)" onclick="deleteDay('${day.id}')">✕</button>` : ''}
       </div>
       <div class="itinerary-list" data-day-id="${day.id}">
@@ -475,6 +517,7 @@ function renderDay(day, index) {
       <button class="add-btn" onclick="openItineraryModal('${day.id}')">+ Add Itinerary</button>
       ${renderAccommodation(day.accommodation, day.id)}
       ${!day.accommodation ? `<button class="add-btn" style="margin-top:0" onclick="openAccommodationModal('${day.id}')">+ Add Accommodation</button>` : ''}
+      ${summaryHtml}
     </div>`;
 }
 
@@ -969,6 +1012,49 @@ function deleteTripAndRefresh(id) {
 // =============================================================================
 // Modal helpers
 // =============================================================================
+
+async function generateDaySummary(dayId) {
+  if (!state.trip) return;
+  const day = state.trip.days.find(d => d.id === dayId);
+  if (!day) return;
+
+  const summaryEl = document.getElementById(`summary-${dayId}`);
+  const btnEl = document.querySelector(`.day-card[data-id="${dayId}"] .btn-gen`);
+  if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner"></span> Thinking...'; }
+  if (summaryEl) { summaryEl.innerHTML = '<div class="day-summary"><span class="spinner"></span> Generating summary...</div>'; }
+
+  try {
+    const res = await fetch('/api/generate-day-summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        day: {
+          date: day.date,
+          itineraries: day.itineraries.map(i => ({
+            title: i.title,
+            startTime: i.startTime,
+            endTime: i.endTime,
+            description: i.description,
+            mealType: i.mealType,
+          })),
+          accommodation: day.accommodation ? { name: day.accommodation.name } : null,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    day.summary = { theme: data.theme, highlights: data.highlights };
+  } catch (err) {
+    day.summary = { theme: 'Could not generate', highlights: [err.message] };
+  }
+
+  renderApp();
+}
 
 function onMealCheckboxChange(selected) {
   ['breakfast', 'lunch', 'dinner', 'shopping'].forEach(type => {
