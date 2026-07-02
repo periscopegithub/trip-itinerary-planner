@@ -511,13 +511,13 @@ function renderDay(day, index) {
         <button class="btn btn-sm btn-gen" onclick="generateDaySummary('${day.id}')">${day.summary ? 'Regen' : 'Generate'} Summary</button>
         ${state.trip.days.length > 1 ? `<button class="btn-icon btn-sm" title="Delete day" style="color:var(--danger)" onclick="deleteDay('${day.id}')">✕</button>` : ''}
       </div>
+      ${summaryHtml}
       <div class="itinerary-list" data-day-id="${day.id}">
         ${itemsHtml}
       </div>
       <button class="add-btn" onclick="openItineraryModal('${day.id}')">+ Add Itinerary</button>
       ${renderAccommodation(day.accommodation, day.id)}
       ${!day.accommodation ? `<button class="add-btn" style="margin-top:0" onclick="openAccommodationModal('${day.id}')">+ Add Accommodation</button>` : ''}
-      ${summaryHtml}
     </div>`;
 }
 

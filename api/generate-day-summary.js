@@ -14,59 +14,68 @@ export default async function handler(req, res) {
   }
 
   const lines = [];
-  if (day.date) lines.push(`Date: ${day.date}`);
-  if (day.accommodation) lines.push(`Accommodation: ${day.accommodation.name}`);
+  if (day.date) lines.push(`日期: ${day.date}`);
+  if (day.accommodation) lines.push(`住宿: ${day.accommodation.name}`);
   day.itineraries.forEach((item, i) => {
     const time = item.startTime && item.endTime ? `${item.startTime}-${item.endTime}` : '';
     const meal = item.mealType ? `[${item.mealType}] ` : '';
     lines.push(`${i + 1}. ${meal}${item.title} ${time}`.trim());
   });
 
-  const prompt = `Analyze this day itinerary and respond ONLY with a JSON object (no markdown, no code fences, no extra text):
+  const prompt = `分析以下行程，並僅以 JSON 格式回應（不要 markdown、不要程式碼區塊、不要其他文字），使用繁體中文：
 
-{"theme":"a catchy 3-6 word phrase capturing this day","highlights":["highlight 1","highlight 2","highlight 3"]}
+{"theme":"用3-6個字的中文短語概括這一天的特色主題","highlights":["重點一","重點二","重點三"]}
 
 ${lines.join('\n')}`;
 
-  try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'qwen/qwen3.7-plus',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 120,
-        temperature: 0.7,
-      }),
-    });
+  const providers = [
+    { model: 'qwen/qwen3.7-plus' },
+    { model: 'qwen/qwen3-next-80b-a3b-instruct:free' },
+    { model: 'nvidia/nemotron-3-super-120b-a12b:free' },
+  ];
 
-    const text = await response.text();
-
-    if (!response.ok) {
-      return res.status(502).json({ error: `API error ${response.status}: ${text.slice(0, 300)}` });
-    }
-
-    const data = JSON.parse(text);
-    const content = (data.choices?.[0]?.message?.content || '').trim();
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-
-    if (!jsonMatch) {
-      return res.status(200).json({
-        theme: 'A Great Day',
-        highlights: ['(Could not generate structured highlights)'],
-        _raw: content.slice(0, 300),
+  let lastError = '';
+  for (const provider of providers) {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: provider.model,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 150,
+          temperature: 0.7,
+        }),
       });
-    }
 
-    const parsed = JSON.parse(jsonMatch[0]);
-    return res.status(200).json({
-      theme: parsed.theme || 'A Great Day',
-      highlights: Array.isArray(parsed.highlights) ? parsed.highlights : [],
-    });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
+      const text = await response.text();
+
+      if (!response.ok) {
+        lastError = `${provider.model}: ${response.status} — ${text.slice(0, 200)}`;
+        continue;
+      }
+
+      const data = JSON.parse(text);
+      const content = (data.choices?.[0]?.message?.content || '').trim();
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+
+      if (!jsonMatch) {
+        lastError = `${provider.model}: could not parse JSON — "${content.slice(0, 200)}"`;
+        continue;
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      return res.status(200).json({
+        theme: parsed.theme || '精彩一日',
+        highlights: Array.isArray(parsed.highlights) ? parsed.highlights : [],
+      });
+    } catch (err) {
+      lastError = `${provider.model}: ${err.message}`;
+    }
   }
+
+  return res.status(502).json({ error: `All providers failed. ${lastError}` });
 }
