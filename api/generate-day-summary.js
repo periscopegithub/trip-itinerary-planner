@@ -8,11 +8,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing day data or no itineraries' });
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'OPENROUTER_API_KEY not set' });
-  }
-
   const lines = [];
   if (day.date) lines.push(`日期: ${day.date}`);
   if (day.accommodation) lines.push(`住宿: ${day.accommodation.name}`);
@@ -33,33 +28,49 @@ export default async function handler(req, res) {
 
 ${lines.join('\n')}`;
 
-  const providers = [
-    { model: 'qwen/qwen3.7-plus' },
-    { model: 'qwen/qwen3-next-80b-a3b-instruct:free' },
-    { model: 'nvidia/nemotron-3-super-120b-a12b:free' },
-  ];
+  const nvidiaKey = process.env.NVIDIA_API_KEY;
+  const openRouterKey = process.env.OPENROUTER_API_KEY;
+
+  const providers = [];
+  if (nvidiaKey) providers.push({
+    name: 'nvidia',
+    url: 'https://integrate.api.nvidia.com/v1/chat/completions',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${nvidiaKey}`,
+      'Accept': 'application/json',
+    },
+    model: 'minimaxai/minimax-m3',
+    body: { model: 'minimaxai/minimax-m3', messages: [{ role: 'user', content: prompt }], max_tokens: 8192, temperature: 1.0, top_p: 0.95 },
+  });
+  if (openRouterKey) providers.push({
+    name: 'openrouter',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${openRouterKey}`,
+    },
+    model: 'nvidia/nemotron-3-super-120b-a12b:free',
+    body: { model: 'nvidia/nemotron-3-super-120b-a12b:free', messages: [{ role: 'user', content: prompt }], max_tokens: 500, temperature: 0.7 },
+  });
+
+  if (!providers.length) {
+    return res.status(500).json({ error: 'No API keys configured' });
+  }
 
   let lastError = '';
   for (const provider of providers) {
     try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const response = await fetch(provider.url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: provider.model,
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 150,
-          temperature: 0.7,
-        }),
+        headers: provider.headers,
+        body: JSON.stringify(provider.body),
       });
 
       const text = await response.text();
 
       if (!response.ok) {
-        lastError = `${provider.model}: ${response.status} — ${text.slice(0, 200)}`;
+        lastError = `${provider.name}: ${response.status} — ${text.slice(0, 200)}`;
         continue;
       }
 
@@ -68,7 +79,7 @@ ${lines.join('\n')}`;
       const jsonMatch = content.match(/\{[\s\S]*\}/);
 
       if (!jsonMatch) {
-        lastError = `${provider.model}: could not parse JSON — "${content.slice(0, 200)}"`;
+        lastError = `${provider.name}: could not parse JSON — "${content.slice(0, 200)}"`;
         continue;
       }
 
@@ -78,7 +89,7 @@ ${lines.join('\n')}`;
         highlights: Array.isArray(parsed.highlights) ? parsed.highlights : [],
       });
     } catch (err) {
-      lastError = `${provider.model}: ${err.message}`;
+      lastError = `${provider.name}: ${err.message}`;
     }
   }
 
