@@ -28,18 +28,27 @@ export default async function handler(req, res) {
 
 ${lines.join('\n')}`;
 
+  const nvidiaKey = process.env.NVIDIA_API_KEY;
   const openRouterKey = process.env.OPENROUTER_API_KEY;
 
   const providers = [];
-  if (openRouterKey) providers.push({
-    name: 'deepseek',
-    url: 'https://openrouter.ai/api/v1/chat/completions',
+  if (nvidiaKey) providers.push({
+    name: 'nvidia',
+    url: 'https://integrate.api.nvidia.com/v1/chat/completions',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${openRouterKey}`,
+      'Authorization': `Bearer ${nvidiaKey}`,
+      'Accept': 'application/json',
     },
-    model: 'deepseek/deepseek-v4-flash',
-    body: { model: 'deepseek/deepseek-v4-flash', messages: [{ role: 'user', content: prompt }], max_tokens: 400, temperature: 0.7 },
+    model: 'deepseek-ai/deepseek-v4-flash',
+    body: {
+      model: 'deepseek-ai/deepseek-v4-flash',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 16384,
+      temperature: 1.0,
+      top_p: 0.95,
+      extra_body: { chat_template_kwargs: { thinking: true, reasoning_effort: 'high' } },
+    },
   });
   if (openRouterKey) providers.push({
     name: 'openrouter',
@@ -73,7 +82,8 @@ ${lines.join('\n')}`;
       }
 
       const data = JSON.parse(text);
-      const content = (data.choices?.[0]?.message?.content || '').trim();
+      const msg = data.choices?.[0]?.message || {};
+      const content = (msg.content || msg.reasoning_content || msg.reasoning || '').trim();
       const jsonMatch = content.match(/\{[\s\S]*\}/);
 
       if (!jsonMatch) {
