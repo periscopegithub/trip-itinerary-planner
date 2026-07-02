@@ -360,7 +360,8 @@ function loadTrip(id) {
   const trip = all.find(t => t.id === id);
   if (trip) {
     state.trip = trip;
-    renderApp();
+    saveTrip();
+  renderApp();
   }
 }
 
@@ -371,7 +372,8 @@ function deleteTrip(id) {
   state.trips = all.map(t => ({ id: t.id, name: t.name, dayCount: t.days.length, updatedAt: new Date().toISOString() }));
   if (state.trip && state.trip.id === id) {
     state.trip = null;
-    renderApp();
+    saveTrip();
+  renderApp();
   }
 }
 
@@ -546,7 +548,6 @@ function renderApp() {
   app.innerHTML = `
     <div class="toolbar">
       <button class="btn" onclick="createNewTrip()" title="New trip">+ New</button>
-      <button class="btn btn-primary" onclick="saveTripAndRefresh()">Save</button>
       <button class="btn" onclick="openLoadModal()">Load</button>
       <span class="trip-name" contenteditable="true" spellcheck="false"
             onblur="onTripNameChange(this.textContent)"
@@ -583,7 +584,8 @@ function initSortable() {
         state.trip.days.forEach(d => { dayMap[d.id] = d; });
         state.trip.days = order.map(id => dayMap[id]).filter(Boolean);
         recalculateDayDates(state.trip.days);
-        renderApp();
+        saveTrip();
+  renderApp();
       }
     });
   }
@@ -602,7 +604,8 @@ function initSortable() {
         const itemMap = {};
         day.itineraries.forEach(item => { itemMap[item.id] = item; });
         day.itineraries = order.map(id => itemMap[id]).filter(Boolean);
-        renderApp();
+        saveTrip();
+  renderApp();
       }
     });
   });
@@ -625,6 +628,7 @@ function createNewTrip() {
       accommodation: null
     }]
   };
+  saveTrip();
   renderApp();
 }
 
@@ -633,7 +637,8 @@ function onTripNameChange(name) {
     state.trip.name = name.trim();
   } else if (state.trip) {
     // Revert to previous name if empty
-    renderApp();
+    saveTrip();
+  renderApp();
   }
 }
 
@@ -652,6 +657,7 @@ function addDay() {
     itineraries: [],
     accommodation: null
   });
+  saveTrip();
   renderApp();
 }
 
@@ -660,6 +666,7 @@ function deleteDay(dayId) {
   if (!confirm('Delete this day and all its items?')) return;
   state.trip.days = state.trip.days.filter(d => d.id !== dayId);
   recalculateDayDates(state.trip.days);
+  saveTrip();
   renderApp();
 }
 
@@ -678,6 +685,7 @@ function onDayDateChange(dayId, newDate) {
       state.trip.days[i].date = addDays(state.trip.days[i - 1].date, 1);
     }
   }
+  saveTrip();
   renderApp();
 }
 
@@ -842,7 +850,8 @@ function openItineraryModal(dayId, itemId) {
     }
 
     closeModal('itinerary-modal');
-    renderApp();
+    saveTrip();
+  renderApp();
   });
 
   // Close on overlay click
@@ -857,6 +866,7 @@ function deleteItinerary(dayId, itemId) {
   if (!day) return;
   day.itineraries = day.itineraries.filter(i => i.id !== itemId);
   closeModal('itinerary-modal');
+  saveTrip();
   renderApp();
 }
 
@@ -941,7 +951,8 @@ function openAccommodationModal(dayId) {
     };
 
     closeModal('accommodation-modal');
-    renderApp();
+    saveTrip();
+  renderApp();
   });
 
   document.getElementById('accommodation-modal').addEventListener('click', function(e) {
@@ -955,6 +966,7 @@ function deleteAccommodation(dayId) {
   if (!day) return;
   day.accommodation = null;
   closeModal('accommodation-modal');
+  saveTrip();
   renderApp();
 }
 
@@ -1061,6 +1073,7 @@ async function generateDaySummary(dayId) {
     day.summary = { theme: 'Could not generate', highlights: [err.message] };
   }
 
+  saveTrip();
   renderApp();
 }
 
