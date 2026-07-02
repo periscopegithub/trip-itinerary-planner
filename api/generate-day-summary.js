@@ -47,7 +47,7 @@ ${lines.join('\n')}`;
       max_tokens: 16384,
       temperature: 1.0,
       top_p: 0.95,
-      extra_body: { chat_template_kwargs: { thinking: true, reasoning_effort: 'high' } },
+      extra_body: { chat_template_kwargs: { thinking: true, reasoning_effort: 'low' } },
     },
   });
   if (openRouterKey) providers.push({
@@ -58,7 +58,7 @@ ${lines.join('\n')}`;
       'Authorization': `Bearer ${openRouterKey}`,
     },
     model: 'nvidia/nemotron-3-super-120b-a12b:free',
-    body: { model: 'nvidia/nemotron-3-super-120b-a12b:free', messages: [{ role: 'user', content: prompt }], max_tokens: 500, temperature: 0.7 },
+    body: { model: 'nvidia/nemotron-3-super-120b-a12b:free', messages: [{ role: 'user', content: prompt }], max_tokens: 2000, temperature: 0.7 },
   });
 
   if (!providers.length) {
