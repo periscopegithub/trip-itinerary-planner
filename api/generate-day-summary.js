@@ -87,6 +87,8 @@ ${lines.join('\n')}`;
       return res.status(200).json({
         theme: parsed.theme || '精彩一日',
         highlights: Array.isArray(parsed.highlights) ? parsed.highlights : [],
+        provider: provider.name,
+      });
       });
     } catch (err) {
       lastError = `${provider.name}: ${err.message}`;

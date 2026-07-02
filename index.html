@@ -98,7 +98,8 @@ body {
   font-size: 0.85rem; color: var(--text-secondary); padding: 2px 0;
 }
 .day-summary .summary-highlights li::before { content: "✦ "; color: var(--accent); }
-.summary-actions { margin-top: 8px; display: flex; gap: 6px; }
+.summary-actions { margin-top: 8px; display: flex; gap: 6px; align-items: center; }
+.summary-provider { font-size: 0.72rem; color: #aaa; margin-left: auto; }
 
 /* Generate button */
 .btn-gen { font-size: 0.78rem; padding: 3px 10px; white-space: nowrap; }
@@ -498,6 +499,7 @@ function renderDay(day, index) {
       </ul>
       <div class="summary-actions">
         <button class="btn btn-sm btn-gen" onclick="generateDaySummary('${day.id}')">Regenerate</button>
+        ${day.summary.provider ? `<span class="summary-provider">via ${day.summary.provider === 'nvidia' ? 'MiniMax M3 (NVIDIA)' : 'Nemotron (OpenRouter)'}</span>` : ''}
       </div>
     </div>` : `<div id="summary-${day.id}"></div>`;
 
@@ -1020,8 +1022,14 @@ async function generateDaySummary(dayId) {
 
   const summaryEl = document.getElementById(`summary-${dayId}`);
   const btnEl = document.querySelector(`.day-card[data-id="${dayId}"] .btn-gen`);
-  if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner"></span> Thinking...'; }
-  if (summaryEl) { summaryEl.innerHTML = '<div class="day-summary"><span class="spinner"></span> Generating summary...</div>'; }
+
+  function setStatus(providerName, label) {
+    const name = providerName === 'nvidia' ? 'MiniMax M3 (NVIDIA)' : 'Nemotron (OpenRouter)';
+    if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = `<span class="spinner"></span> Calling ${name}...`; }
+    if (summaryEl) { summaryEl.innerHTML = `<div class="day-summary"><span class="spinner"></span> ${label} via ${name}...</div>`; }
+  }
+
+  setStatus('nvidia', 'Generating summary');
 
   try {
     const res = await fetch('/api/generate-day-summary', {
@@ -1048,7 +1056,7 @@ async function generateDaySummary(dayId) {
     }
 
     const data = await res.json();
-    day.summary = { theme: data.theme, highlights: data.highlights };
+    day.summary = { theme: data.theme, highlights: data.highlights, provider: data.provider };
   } catch (err) {
     day.summary = { theme: 'Could not generate', highlights: [err.message] };
   }
