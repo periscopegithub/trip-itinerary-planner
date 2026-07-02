@@ -20,11 +20,16 @@ export default async function handler(req, res) {
     const time = item.startTime && item.endTime ? `${item.startTime}-${item.endTime}` : '';
     const meal = item.mealType ? `[${item.mealType}] ` : '';
     lines.push(`${i + 1}. ${meal}${item.title} ${time}`.trim());
+    if (item.description) lines.push(`   描述: ${item.description.slice(0, 300)}`);
   });
 
+  const count = day.itineraries.length;
   const prompt = `分析以下行程，並僅以 JSON 格式回應（不要 markdown、不要程式碼區塊、不要其他文字），使用繁體中文：
 
-{"theme":"用3-6個字的中文短語概括這一天的特色主題","highlights":["重點一","重點二","重點三"]}
+{
+  "theme": "用箭頭列出今天所有行程項目名稱，例如：羅浮宮 → 艾菲爾鐵塔 → 塞納河遊船",
+  "highlights": [${Array(count).fill('"為該項目撰寫一句重點描述（參考其描述內容）"').join(', ')}]
+}
 
 ${lines.join('\n')}`;
 
