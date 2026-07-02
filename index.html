@@ -105,6 +105,14 @@ body {
 .btn-gen { font-size: 0.78rem; padding: 3px 10px; white-space: nowrap; }
 .btn-gen:disabled { opacity: 0.6; cursor: wait; }
 
+/* Trip selector dropdown */
+.trip-select {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 0.875rem; font-family: inherit; background: var(--card);
+  cursor: pointer; min-width: 160px; max-width: 300px;
+}
+.trip-select:focus { border-color: var(--accent); outline: none; }
+
 /* Loading spinner */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinner {
@@ -528,12 +536,22 @@ function renderDay(day, index) {
 function renderApp() {
   const app = document.getElementById('app');
 
+  refreshTripList();
+  const savedTrips = state.trips;
+  const tripSelectHtml = (selectedId, placeholder) => {
+    const opts = savedTrips.map(t => `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${escHtml(t.name)}</option>`).join('');
+    if (placeholder) {
+      return `<select class="trip-select" onchange="onTripSelect(this.value)"><option value="">${placeholder}</option>${opts}</select>`;
+    }
+    return `<select class="trip-select" onchange="onTripSelect(this.value)">${opts}</select>`;
+  };
+
   if (!state.trip) {
     app.innerHTML = `
       <div class="toolbar">
-        <span style="font-weight:600;font-size:1.1rem;">Trip Itinerary Planner</span>
+        <span style="font-weight:600;font-size:1.1rem;">Trip Planner</span>
         <button class="btn btn-primary" onclick="createNewTrip()">+ New Trip</button>
-        <button class="btn" onclick="openLoadModal()">Load Trip</button>
+        ${savedTrips.length ? tripSelectHtml(null, 'Load Trip...') : ''}
       </div>
       <div class="empty-state empty-state--page">
         <h2>Welcome</h2>
@@ -548,10 +566,9 @@ function renderApp() {
   app.innerHTML = `
     <div class="toolbar">
       <button class="btn" onclick="createNewTrip()" title="New trip">+ New</button>
-      <button class="btn" onclick="openLoadModal()">Load</button>
-      <span class="trip-name" contenteditable="true" spellcheck="false"
-            onblur="onTripNameChange(this.textContent)"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">${escHtml(trip.name)}</span>
+      ${tripSelectHtml(trip.id)}
+      <button class="btn btn-sm" onclick="renameTrip()" title="Rename trip">✎</button>
+      <button class="btn btn-sm btn-danger" onclick="deleteCurrentTrip()" title="Delete trip">✕</button>
     </div>
     <div class="day-list" id="day-list">
       ${daysHtml}
@@ -561,10 +578,26 @@ function renderApp() {
   initSortable();
 }
 
-function saveTripAndRefresh() {
-  saveTrip();
-  refreshTripList();
-  renderApp();
+function onTripSelect(id) {
+  if (!id) return;
+  loadTrip(id);
+}
+
+function renameTrip() {
+  if (!state.trip) return;
+  const name = prompt('Rename trip:', state.trip.name);
+  if (name && name.trim()) {
+    state.trip.name = name.trim();
+    saveTrip();
+    renderApp();
+  }
+}
+
+function deleteCurrentTrip() {
+  if (!state.trip) return;
+  if (confirm(`Delete "${state.trip.name}"? This cannot be undone.`)) {
+    deleteTrip(state.trip.id);
+  }
 }
 
 // =============================================================================
@@ -632,15 +665,6 @@ function createNewTrip() {
   renderApp();
 }
 
-function onTripNameChange(name) {
-  if (state.trip && name.trim()) {
-    state.trip.name = name.trim();
-  } else if (state.trip) {
-    // Revert to previous name if empty
-    saveTrip();
-  renderApp();
-  }
-}
 
 // =============================================================================
 // Day operations
