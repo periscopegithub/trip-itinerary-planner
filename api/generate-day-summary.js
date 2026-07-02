@@ -41,7 +41,7 @@ ${lines.join('\n')}`;
       'Accept': 'application/json',
     },
     model: 'minimaxai/minimax-m3',
-    body: { model: 'minimaxai/minimax-m3', messages: [{ role: 'user', content: prompt }], max_tokens: 8192, temperature: 1.0, top_p: 0.95 },
+    body: { model: 'minimaxai/minimax-m3', messages: [{ role: 'user', content: prompt }], max_tokens: 500, temperature: 1.0, top_p: 0.95 },
   });
   if (openRouterKey) providers.push({
     name: 'openrouter',
@@ -88,7 +88,6 @@ ${lines.join('\n')}`;
         theme: parsed.theme || '精彩一日',
         highlights: Array.isArray(parsed.highlights) ? parsed.highlights : [],
         provider: provider.name,
-      });
       });
     } catch (err) {
       lastError = `${provider.name}: ${err.message}`;
