@@ -107,6 +107,19 @@ body {
 .itinerary-item .item-refs a:hover { text-decoration: underline; }
 .itinerary-item .item-actions { display: flex; gap: 4px; flex-shrink: 0; }
 
+.itinerary-item.meal-breakfast { background: #fff8e1; border-color: #ffe082; }
+.itinerary-item.meal-lunch { background: #fff3e0; border-color: #ffcc80; }
+.itinerary-item.meal-dinner { background: #ede7f6; border-color: #b39ddb; }
+.item-meal-tag { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 1px 6px; border-radius: 3px; }
+.meal-breakfast .item-meal-tag { background: #ffecb3; color: #e65100; }
+.meal-lunch .item-meal-tag { background: #ffe0b2; color: #bf360c; }
+.meal-dinner .item-meal-tag { background: #d1c4e9; color: #4527a0; }
+
+/* Meal checkboxes */
+.meal-checkboxes { display: flex; gap: 12px; }
+.meal-checkbox { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 0.85rem; }
+.meal-checkbox input[type="checkbox"] { width: auto; cursor: pointer; }
+
 /* Accommodation section */
 .accommodation-section {
   border-top: 2px dashed var(--border); padding: 12px 16px; margin: 0 12px 12px;
@@ -392,12 +405,16 @@ function renderItineraryItem(item, dayId) {
   const refsHtml = renderRefUrls(item.refUrls);
   const descHtml = renderMarkdown(item.description);
   const duration = formatDuration(item.duration);
+  const mealClass = item.mealType ? ` meal-${item.mealType}` : '';
+  const mealTag = item.mealType
+    ? `<span class="item-meal-tag">${escHtml(item.mealType)}</span>`
+    : '';
 
   return `
-    <div class="itinerary-item" data-id="${item.id}" data-day-id="${dayId}">
+    <div class="itinerary-item${mealClass}" data-id="${item.id}" data-day-id="${dayId}">
       <span class="drag-handle" title="Drag to reorder">⠿</span>
       <div class="item-content" style="cursor:pointer" onclick="openItineraryModal('${dayId}', '${item.id}')">
-        <div class="item-time">${escHtml(item.startTime || '--:--')} – ${escHtml(item.endTime || '--:--')}${duration ? ` (${duration})` : ''}</div>
+        <div class="item-time">${mealTag} ${escHtml(item.startTime || '--:--')} – ${escHtml(item.endTime || '--:--')}${duration ? ` (${duration})` : ''}</div>
         <div class="item-title">${escHtml(item.title)}</div>
         ${descHtml ? `<div class="item-description">${descHtml}</div>` : ''}
         ${mapHtml ? `<div class="item-map">${mapHtml}</div>` : ''}
@@ -636,6 +653,7 @@ function openItineraryModal(dayId, itemId) {
   const description = item ? (item.description || '') : '';
   const mapCode = item ? (item.mapEmbedCode || '') : '';
   const refUrls = item ? (item.refUrls || []) : [];
+  const mealType = item ? (item.mealType || '') : '';
   const isEdit = !!item;
 
   const refRowsHtml = refUrls.map((ref, i) => `
@@ -656,6 +674,14 @@ function openItineraryModal(dayId, itemId) {
           <div class="form-group">
             <label>Title *</label>
             <input type="text" id="itin-title" value="${escHtml(title)}" placeholder="e.g. Visit the Louvre">
+          </div>
+          <div class="form-group">
+            <label>Meal</label>
+            <div class="meal-checkboxes">
+              <label class="meal-checkbox"><input type="checkbox" id="meal-breakfast" value="breakfast" ${mealType === 'breakfast' ? 'checked' : ''} onchange="onMealCheckboxChange('breakfast')"> Breakfast</label>
+              <label class="meal-checkbox"><input type="checkbox" id="meal-lunch" value="lunch" ${mealType === 'lunch' ? 'checked' : ''} onchange="onMealCheckboxChange('lunch')"> Lunch</label>
+              <label class="meal-checkbox"><input type="checkbox" id="meal-dinner" value="dinner" ${mealType === 'dinner' ? 'checked' : ''} onchange="onMealCheckboxChange('dinner')"> Dinner</label>
+            </div>
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -743,6 +769,10 @@ function openItineraryModal(dayId, itemId) {
     const data = {
       id: item ? item.id : uuid(),
       title: titleVal,
+      mealType: document.getElementById('meal-breakfast').checked ? 'breakfast'
+        : document.getElementById('meal-lunch').checked ? 'lunch'
+        : document.getElementById('meal-dinner').checked ? 'dinner'
+        : null,
       startTime: document.getElementById('itin-start').value,
       endTime: document.getElementById('itin-end').value,
       duration: parseInt(document.getElementById('itin-duration').value) || calcDuration(
@@ -934,6 +964,13 @@ function deleteTripAndRefresh(id) {
 // =============================================================================
 // Modal helpers
 // =============================================================================
+
+function onMealCheckboxChange(selected) {
+  ['breakfast', 'lunch', 'dinner'].forEach(type => {
+    const el = document.getElementById(`meal-${type}`);
+    if (el) el.checked = type === selected;
+  });
+}
 
 function closeModal(modalId) {
   const modal = document.getElementById(modalId);
