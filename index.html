@@ -1024,7 +1024,7 @@ async function generateDaySummary(dayId) {
   const btnEl = document.querySelector(`.day-card[data-id="${dayId}"] .btn-gen`);
 
   function setStatus(providerName, label) {
-    const name = providerName === 'nvidia' ? 'MiniMax M3 (NVIDIA)' : 'Nemotron (OpenRouter)';
+    const name = providerName === 'deepseek' ? 'DeepSeek V4 Flash' : 'Nemotron (OpenRouter)';
     if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = `<span class="spinner"></span> Calling ${name}...`; }
     if (summaryEl) { summaryEl.innerHTML = `<div class="day-summary"><span class="spinner"></span> ${label} via ${name}...</div>`; }
   }

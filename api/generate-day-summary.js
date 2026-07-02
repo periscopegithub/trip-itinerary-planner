@@ -22,26 +22,24 @@ export default async function handler(req, res) {
   const prompt = `分析以下行程，並僅以 JSON 格式回應（不要 markdown、不要程式碼區塊、不要其他文字），使用繁體中文：
 
 {
-  "theme": "用箭頭列出今天所有行程項目名稱，例如：羅浮宮 → 艾菲爾鐵塔 → 塞納河遊船",
-  "highlights": [${Array(count).fill('"為該項目撰寫一句重點描述（參考其描述內容）"').join(', ')}]
+  "theme": "用箭頭列出今天所有行程項目，每個項目加上動詞，例如：參觀羅浮宮 → 登上艾菲爾鐵塔 → 搭乘塞納河遊船",
+  "highlights": [${Array(count).fill('"為該項目撰寫重點描述，最多三句話（參考其描述內容）"').join(', ')}]
 }
 
 ${lines.join('\n')}`;
 
-  const nvidiaKey = process.env.NVIDIA_API_KEY;
   const openRouterKey = process.env.OPENROUTER_API_KEY;
 
   const providers = [];
-  if (nvidiaKey) providers.push({
-    name: 'nvidia',
-    url: 'https://integrate.api.nvidia.com/v1/chat/completions',
+  if (openRouterKey) providers.push({
+    name: 'deepseek',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${nvidiaKey}`,
-      'Accept': 'application/json',
+      'Authorization': `Bearer ${openRouterKey}`,
     },
-    model: 'minimaxai/minimax-m3',
-    body: { model: 'minimaxai/minimax-m3', messages: [{ role: 'user', content: prompt }], max_tokens: 500, temperature: 1.0, top_p: 0.95 },
+    model: 'deepseek/deepseek-v4-flash',
+    body: { model: 'deepseek/deepseek-v4-flash', messages: [{ role: 'user', content: prompt }], max_tokens: 400, temperature: 0.7 },
   });
   if (openRouterKey) providers.push({
     name: 'openrouter',
