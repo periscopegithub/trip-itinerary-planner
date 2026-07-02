@@ -110,10 +110,12 @@ body {
 .itinerary-item.meal-breakfast { background: #fff8e1; border-color: #ffe082; }
 .itinerary-item.meal-lunch { background: #fff3e0; border-color: #ffcc80; }
 .itinerary-item.meal-dinner { background: #ede7f6; border-color: #b39ddb; }
+.itinerary-item.meal-shopping { background: #e8f5e9; border-color: #a5d6a7; }
 .item-meal-tag { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 1px 6px; border-radius: 3px; }
 .meal-breakfast .item-meal-tag { background: #ffecb3; color: #e65100; }
 .meal-lunch .item-meal-tag { background: #ffe0b2; color: #bf360c; }
 .meal-dinner .item-meal-tag { background: #d1c4e9; color: #4527a0; }
+.meal-shopping .item-meal-tag { background: #c8e6c9; color: #2e7d32; }
 
 /* Meal checkboxes */
 .meal-checkboxes { display: flex; gap: 12px; }
@@ -123,6 +125,7 @@ body {
 /* Accommodation section */
 .accommodation-section {
   border-top: 2px dashed var(--border); padding: 12px 16px; margin: 0 12px 12px;
+  background: #f3e5f5; border-radius: 0 0 6px 6px;
 }
 .accommodation-section .acc-header { font-size: 0.8rem; text-transform: uppercase; color: #999; font-weight: 600; margin-bottom: 6px; }
 .accommodation-section .acc-name { font-weight: 700; font-size: 1.05rem; margin-bottom: 4px; }
@@ -681,6 +684,7 @@ function openItineraryModal(dayId, itemId) {
               <label class="meal-checkbox"><input type="checkbox" id="meal-breakfast" value="breakfast" ${mealType === 'breakfast' ? 'checked' : ''} onchange="onMealCheckboxChange('breakfast')"> Breakfast</label>
               <label class="meal-checkbox"><input type="checkbox" id="meal-lunch" value="lunch" ${mealType === 'lunch' ? 'checked' : ''} onchange="onMealCheckboxChange('lunch')"> Lunch</label>
               <label class="meal-checkbox"><input type="checkbox" id="meal-dinner" value="dinner" ${mealType === 'dinner' ? 'checked' : ''} onchange="onMealCheckboxChange('dinner')"> Dinner</label>
+              <label class="meal-checkbox"><input type="checkbox" id="meal-shopping" value="shopping" ${mealType === 'shopping' ? 'checked' : ''} onchange="onMealCheckboxChange('shopping')"> Shopping</label>
             </div>
           </div>
           <div class="form-row">
@@ -772,6 +776,7 @@ function openItineraryModal(dayId, itemId) {
       mealType: document.getElementById('meal-breakfast').checked ? 'breakfast'
         : document.getElementById('meal-lunch').checked ? 'lunch'
         : document.getElementById('meal-dinner').checked ? 'dinner'
+        : document.getElementById('meal-shopping').checked ? 'shopping'
         : null,
       startTime: document.getElementById('itin-start').value,
       endTime: document.getElementById('itin-end').value,
@@ -966,7 +971,7 @@ function deleteTripAndRefresh(id) {
 // =============================================================================
 
 function onMealCheckboxChange(selected) {
-  ['breakfast', 'lunch', 'dinner'].forEach(type => {
+  ['breakfast', 'lunch', 'dinner', 'shopping'].forEach(type => {
     const el = document.getElementById(`meal-${type}`);
     if (el) el.checked = type === selected;
   });
