@@ -430,7 +430,9 @@ function sortItineraries(items) {
 
 function renderMarkdown(text) {
   if (!text || !text.trim()) return '';
-  return marked.parse(text);
+  // Collapse blank lines after <br> to prevent table termination
+  const cleaned = text.replace(/<br\s*\/?>\s*\n\s*\n/g, '<br>\n');
+  return marked.parse(cleaned);
 }
 
 function renderRefUrls(urls) {
