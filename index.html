@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Trip Itinerary Planner</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -162,9 +162,6 @@ body {
 .meal-dinner .item-meal-tag { background: #d1c4e9; color: #4527a0; }
 .meal-shopping .item-meal-tag { background: #c8e6c9; color: #2e7d32; }
 
-.itinerary-item.is-travel { background: #e3f2fd; border: 1px dashed #90caf9; }
-.is-travel .item-meal-tag { background: #bbdefb; color: #1565c0; }
-
 /* Meal checkboxes */
 .meal-checkboxes { display: flex; gap: 12px; }
 .meal-checkbox { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 0.85rem; }
@@ -242,11 +239,10 @@ body {
 .ref-url-row input { flex: 1; }
 .ref-url-row .btn-icon { flex-shrink: 0; }
 
-/* Drag and drop */
-.itinerary-item.dragging { opacity: 0.4; }
-.day-card.dragging { opacity: 0.4; }
-.itinerary-list.drag-over { background: #f0f4ff; border-radius: 4px; }
-.day-card.drag-over { box-shadow: 0 0 0 2px var(--accent); }
+/* Sortable ghost */
+.sortable-ghost { opacity: 0.4; }
+.sortable-chosen { box-shadow: var(--shadow-lg); }
+.itinerary-item.sortable-ghost { background: #f0f4ff; }
 
 /* Load modal trip list */
 .trip-list-item {
@@ -462,17 +458,16 @@ function renderItineraryItem(item, dayId) {
   const refsHtml = renderRefUrls(item.refUrls);
   const descHtml = renderMarkdown(item.description);
   const duration = formatDuration(item.duration);
-  const travelClass = item.isTravel ? ' is-travel' : '';
-  const mealClass = !item.isTravel && item.mealType ? ` meal-${item.mealType}` : '';
-  const tag = item.isTravel
-    ? `<span class="item-meal-tag">Travel</span>`
-    : item.mealType ? `<span class="item-meal-tag">${escHtml(item.mealType)}</span>` : '';
+  const mealClass = item.mealType ? ` meal-${item.mealType}` : '';
+  const mealTag = item.mealType
+    ? `<span class="item-meal-tag">${escHtml(item.mealType)}</span>`
+    : '';
 
   return `
-    <div class="itinerary-item${mealClass}${travelClass}" data-id="${item.id}" data-day-id="${dayId}" data-is-travel="${item.isTravel ? '1' : '0'}" draggable="true" ondragstart="dragStart(event,'${item.id}','${dayId}')" ondragend="dragEnd(event)">
+    <div class="itinerary-item${mealClass}" data-id="${item.id}" data-day-id="${dayId}">
       <span class="drag-handle" title="Drag to reorder">⠿</span>
       <div class="item-content" style="cursor:pointer" onclick="openItineraryModal('${dayId}', '${item.id}')">
-        <div class="item-time">${tag} ${escHtml(item.startTime || '--:--')} – ${escHtml(item.endTime || '--:--')}${duration ? ` (${duration})` : ''}</div>
+        <div class="item-time">${mealTag} ${escHtml(item.startTime || '--:--')} – ${escHtml(item.endTime || '--:--')}${duration ? ` (${duration})` : ''}</div>
         <div class="item-title">${escHtml(item.title)}</div>
         ${descHtml ? `<div class="item-description">${descHtml}</div>` : ''}
         ${mapHtml ? `<div class="item-map">${mapHtml}</div>` : ''}
@@ -529,8 +524,8 @@ function renderDay(day, index) {
     </div>` : `<div id="summary-${day.id}"></div>`;
 
   return `
-    <div class="day-card" data-id="${day.id}" ondragover="dayDragOver(event)" ondragleave="dayDragLeave(event)" ondrop="dayDrop(event,'${day.id}')">
-      <div class="day-header" draggable="true" ondragstart="dayDragStart(event,'${day.id}')" ondragend="dayDragEnd(event)">
+    <div class="day-card" data-id="${day.id}">
+      <div class="day-header">
         <span class="drag-handle" title="Drag to reorder days">⠿</span>
         <span class="day-label">Day ${index + 1}</span>
         ${state.trip.days.length > 1 ? `<select class="move-day-select" onchange="if(this.value!=='')moveDayTo('${day.id}',parseInt(this.value))" onclick="event.stopPropagation()"><option value="">Move to...</option>${state.trip.days.map((d,i) => d.id !== day.id ? `<option value="${i}">Day ${i+1}</option>` : '').join('')}</select>` : ''}
@@ -540,7 +535,7 @@ function renderDay(day, index) {
         ${state.trip.days.length > 1 ? `<button class="btn-icon btn-sm" title="Delete day" style="color:var(--danger)" onclick="deleteDay('${day.id}')">✕</button>` : ''}
       </div>
       ${summaryHtml}
-      <div class="itinerary-list" data-day-id="${day.id}" ondragover="itinDragOver(event)" ondragleave="itinDragLeave(event)" ondrop="itinDrop(event,'${day.id}')">
+      <div class="itinerary-list" data-day-id="${day.id}">
         ${itemsHtml}
       </div>
       <button class="add-btn" onclick="openItineraryModal('${day.id}')">+ Add Itinerary</button>
@@ -552,7 +547,6 @@ function renderDay(day, index) {
 function renderApp() {
   const app = document.getElementById('app');
 
-  updateTravelTitles();
   refreshTripList();
   const savedTrips = state.trips;
   const tripSelectHtml = (selectedId, placeholder) => {
@@ -596,6 +590,7 @@ function renderApp() {
     </div>
     <button class="add-day-btn" style="margin-top:16px" onclick="addDay()">+ Add Day</button>`;
 
+  initSortable();
 }
 
 function onTripSelect(id) {
@@ -669,121 +664,44 @@ function importTrips(event) {
 // SortableJS
 // =============================================================================
 
-// =============================================================================
-// Native Drag and Drop
-// =============================================================================
-
-function dragStart(e, itemId, fromDayId) {
-  const el = e.target.closest('.itinerary-item');
-  if (!el || el.dataset.isTravel === '1') {
-    // Prevent travel items from being dragged if they'd end up at position 0 anywhere
-    // Allow drag but flag as travel
-    e.dataTransfer.setData('text/plain', JSON.stringify({ itemId, fromDayId, isTravel: true }));
-  } else {
-    e.dataTransfer.setData('text/plain', JSON.stringify({ itemId, fromDayId, isTravel: false }));
+function initSortable() {
+  // Day list sorting
+  const dayList = document.getElementById('day-list');
+  if (dayList) {
+    Sortable.create(dayList, {
+      handle: '.day-header .drag-handle',
+      animation: 200,
+      onEnd() {
+        const order = Array.from(dayList.querySelectorAll('.day-card')).map(el => el.dataset.id);
+        const dayMap = {};
+        state.trip.days.forEach(d => { dayMap[d.id] = d; });
+        state.trip.days = order.map(id => dayMap[id]).filter(Boolean);
+        recalculateDayDates(state.trip.days);
+        saveTrip();
+  renderApp();
+      }
+    });
   }
-  e.dataTransfer.effectAllowed = 'move';
-  el.classList.add('dragging');
-}
 
-function dragEnd(e) {
-  document.querySelectorAll('.dragging, .drag-over').forEach(el => el.classList.remove('dragging', 'drag-over'));
-}
-
-function itinDragOver(e) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  e.currentTarget.classList.add('drag-over');
-}
-
-function itinDragLeave(e) {
-  e.currentTarget.classList.remove('drag-over');
-}
-
-function itinDrop(e, toDayId) {
-  e.preventDefault();
-  e.currentTarget.classList.remove('drag-over');
-  try {
-    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-    if (!data || !data.itemId) return;
-    const fromDay = state.trip.days.find(d => d.id === data.fromDayId);
-    const toDay = state.trip.days.find(d => d.id === toDayId);
-    if (!fromDay || !toDay) return;
-    const idx = fromDay.itineraries.findIndex(i => i.id === data.itemId);
-    if (idx < 0) return;
-    const [item] = fromDay.itineraries.splice(idx, 1);
-    // Prevent travel item at position 0
-    if (data.isTravel && toDay.itineraries.length === 0) {
-      fromDay.itineraries.splice(idx, 0, item);
-      return;
-    }
-    // Insert at the correct position based on drop location
-    const afterEl = getDropAfterElement(e.currentTarget, e.clientY);
-    if (afterEl) {
-      const afterId = afterEl.dataset.id;
-      const afterIdx = toDay.itineraries.findIndex(i => i.id === afterId);
-      toDay.itineraries.splice(afterIdx, 0, item);
-    } else {
-      toDay.itineraries.push(item);
-    }
-    // Prevent travel at position 0
-    if (toDay.itineraries[0]?.isTravel && toDay.itineraries.length > 1) {
-      const [travelItem] = toDay.itineraries.splice(0, 1);
-      toDay.itineraries.splice(1, 0, travelItem);
-    }
-    saveTrip();
-    renderApp();
-  } catch(e) { /* invalid data */ }
-}
-
-function getDropAfterElement(container, y) {
-  const items = [...container.querySelectorAll('.itinerary-item:not(.dragging)')];
-  return items.reduce((closest, child) => {
-    const box = child.getBoundingClientRect();
-    const offset = y - box.top - box.height / 2;
-    if (offset < 0 && offset > closest.offset) {
-      return { offset: offset, element: child };
-    }
-    return closest;
-  }, { offset: Number.NEGATIVE_INFINITY }).element;
-}
-
-// Day drag and drop
-function dayDragStart(e, dayId) {
-  e.dataTransfer.setData('text/plain', JSON.stringify({ dayId }));
-  e.dataTransfer.effectAllowed = 'move';
-  e.target.closest('.day-card').classList.add('dragging');
-}
-
-function dayDragEnd(e) {
-  document.querySelectorAll('.day-card.dragging, .day-card.drag-over').forEach(el => el.classList.remove('dragging', 'drag-over'));
-}
-
-function dayDragOver(e) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  e.currentTarget.classList.add('drag-over');
-}
-
-function dayDragLeave(e) {
-  e.currentTarget.classList.remove('drag-over');
-}
-
-function dayDrop(e, toDayId) {
-  e.preventDefault();
-  e.currentTarget.classList.remove('drag-over');
-  try {
-    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-    if (!data || !data.dayId || data.dayId === toDayId) return;
-    const fromIdx = state.trip.days.findIndex(d => d.id === data.dayId);
-    const toIdx = state.trip.days.findIndex(d => d.id === toDayId);
-    if (fromIdx < 0 || toIdx < 0) return;
-    const [day] = state.trip.days.splice(fromIdx, 1);
-    state.trip.days.splice(toIdx, 0, day);
-    recalculateDayDates(state.trip.days);
-    saveTrip();
-    renderApp();
-  } catch(e) { /* invalid data */ }
+  // Itinerary list sorting within each day
+  document.querySelectorAll('.itinerary-list').forEach(list => {
+    Sortable.create(list, {
+      handle: '.itinerary-item .drag-handle',
+      animation: 200,
+      group: `itinerary-${list.dataset.dayId}`,
+      onEnd(evt) {
+        const dayId = evt.to.dataset.dayId;
+        const order = Array.from(evt.to.querySelectorAll('.itinerary-item')).map(el => el.dataset.id);
+        const day = state.trip.days.find(d => d.id === dayId);
+        if (!day) return;
+        const itemMap = {};
+        day.itineraries.forEach(item => { itemMap[item.id] = item; });
+        day.itineraries = order.map(id => itemMap[id]).filter(Boolean);
+        saveTrip();
+  renderApp();
+      }
+    });
+  });
 }
 
 // =============================================================================
@@ -887,12 +805,6 @@ function openItineraryModal(dayId, itemId) {
   const mapCode = item ? (item.mapEmbedCode || '') : '';
   const refUrls = item ? (item.refUrls || []) : [];
   const mealType = item ? (item.mealType || '') : '';
-  const isTravel = item ? !!item.isTravel : false;
-  const isFirstItem = !item || day.itineraries.indexOf(item) === 0;
-  const itemIndex = item ? day.itineraries.indexOf(item) : day.itineraries.length;
-  const aboveTitle = itemIndex > 0 && !isFirstItem ? day.itineraries[itemIndex - 1].title : '';
-  const belowTitle = itemIndex < day.itineraries.length - 1 ? day.itineraries[itemIndex + 1].title : '';
-  const autoTitle = aboveTitle && belowTitle ? `${aboveTitle} → ${belowTitle}` : '';
   const isEdit = !!item;
 
   const refRowsHtml = refUrls.map((ref, i) => `
@@ -903,7 +815,7 @@ function openItineraryModal(dayId, itemId) {
     </div>`).join('');
 
   const modalHtml = `
-    <div class="modal-overlay" id="itinerary-modal" data-day-id="${dayId}" data-item-id="${item ? item.id : ''}">
+    <div class="modal-overlay" id="itinerary-modal">
       <div class="modal" onclick="event.stopPropagation()">
         <div class="modal-header">
           <h3>${isEdit ? 'Edit' : 'Add'} Itinerary</h3>
@@ -912,16 +824,15 @@ function openItineraryModal(dayId, itemId) {
         <div class="modal-body">
           <div class="form-group">
             <label>Title *</label>
-            <input type="text" id="itin-title" value="${escHtml(isTravel ? autoTitle : title)}" placeholder="e.g. Visit the Louvre" ${isTravel ? 'readonly' : ''}>
+            <input type="text" id="itin-title" value="${escHtml(title)}" placeholder="e.g. Visit the Louvre">
           </div>
           <div class="form-group">
-            <label>Meal / Type</label>
+            <label>Meal</label>
             <div class="meal-checkboxes">
-              ${!isFirstItem ? `<label class="meal-checkbox"><input type="checkbox" id="meal-travel" value="travel" ${isTravel ? 'checked' : ''} onchange="onTravelCheckboxChange()"> Travel</label>` : ''}
-              <label class="meal-checkbox"><input type="checkbox" id="meal-breakfast" value="breakfast" ${!isTravel && mealType === 'breakfast' ? 'checked' : ''} onchange="onMealCheckboxChange('breakfast')" ${isTravel ? 'disabled' : ''}> Breakfast</label>
-              <label class="meal-checkbox"><input type="checkbox" id="meal-lunch" value="lunch" ${!isTravel && mealType === 'lunch' ? 'checked' : ''} onchange="onMealCheckboxChange('lunch')" ${isTravel ? 'disabled' : ''}> Lunch</label>
-              <label class="meal-checkbox"><input type="checkbox" id="meal-dinner" value="dinner" ${!isTravel && mealType === 'dinner' ? 'checked' : ''} onchange="onMealCheckboxChange('dinner')" ${isTravel ? 'disabled' : ''}> Dinner</label>
-              <label class="meal-checkbox"><input type="checkbox" id="meal-shopping" value="shopping" ${!isTravel && mealType === 'shopping' ? 'checked' : ''} onchange="onMealCheckboxChange('shopping')" ${isTravel ? 'disabled' : ''}> Shopping</label>
+              <label class="meal-checkbox"><input type="checkbox" id="meal-breakfast" value="breakfast" ${mealType === 'breakfast' ? 'checked' : ''} onchange="onMealCheckboxChange('breakfast')"> Breakfast</label>
+              <label class="meal-checkbox"><input type="checkbox" id="meal-lunch" value="lunch" ${mealType === 'lunch' ? 'checked' : ''} onchange="onMealCheckboxChange('lunch')"> Lunch</label>
+              <label class="meal-checkbox"><input type="checkbox" id="meal-dinner" value="dinner" ${mealType === 'dinner' ? 'checked' : ''} onchange="onMealCheckboxChange('dinner')"> Dinner</label>
+              <label class="meal-checkbox"><input type="checkbox" id="meal-shopping" value="shopping" ${mealType === 'shopping' ? 'checked' : ''} onchange="onMealCheckboxChange('shopping')"> Shopping</label>
             </div>
           </div>
           <div class="form-row">
@@ -1007,16 +918,14 @@ function openItineraryModal(dayId, itemId) {
       if (label || url) refs.push({ label: label || url, url: url || '' });
     });
 
-    const isTravelItem = document.getElementById('meal-travel')?.checked || false;
     const data = {
       id: item ? item.id : uuid(),
-      title: isTravelItem ? (autoTitle || titleVal) : titleVal,
-      isTravel: isTravelItem || undefined,
-      mealType: isTravelItem ? null : (document.getElementById('meal-breakfast').checked ? 'breakfast'
+      title: titleVal,
+      mealType: document.getElementById('meal-breakfast').checked ? 'breakfast'
         : document.getElementById('meal-lunch').checked ? 'lunch'
         : document.getElementById('meal-dinner').checked ? 'dinner'
         : document.getElementById('meal-shopping').checked ? 'shopping'
-        : null),
+        : null,
       startTime: document.getElementById('itin-start').value,
       endTime: document.getElementById('itin-end').value,
       duration: parseInt(document.getElementById('itin-duration').value) || calcDuration(
@@ -1264,56 +1173,6 @@ async function generateDaySummary(dayId) {
 
   saveTrip();
   renderApp();
-}
-
-function onTravelCheckboxChange() {
-  const el = document.getElementById('meal-travel');
-  const checked = el?.checked;
-  const titleEl = document.getElementById('itin-title');
-  if (checked) {
-    ['breakfast','lunch','dinner','shopping'].forEach(t => {
-      const cb = document.getElementById(`meal-${t}`);
-      if (cb) { cb.checked = false; cb.disabled = true; }
-    });
-    if (titleEl) {
-      titleEl.readOnly = true;
-      titleEl.style.background = '#f5f5f5';
-      const dayId = document.getElementById('itinerary-modal').dataset.dayId;
-      const itemId = document.getElementById('itinerary-modal').dataset.itemId;
-      if (dayId) {
-        const day = state.trip.days.find(d => d.id === dayId);
-        if (day) {
-          const idx = itemId ? day.itineraries.findIndex(i => i.id === itemId) : day.itineraries.length;
-          const above = idx > 0 ? day.itineraries[idx - 1].title : '';
-          const below = idx < day.itineraries.length - 1 ? day.itineraries[idx + 1].title : '';
-          if (above && below) titleEl.value = above + ' → ' + below;
-        }
-      }
-    }
-  } else {
-    ['breakfast','lunch','dinner','shopping'].forEach(t => {
-      const cb = document.getElementById(`meal-${t}`);
-      if (cb) cb.disabled = false;
-    });
-    if (titleEl) { titleEl.readOnly = false; titleEl.style.background = ''; }
-  }
-}
-
-function updateTravelTitles() {
-  if (!state.trip) return;
-  state.trip.days.forEach(day => {
-    day.itineraries.forEach((item, i) => {
-      if (item.isTravel) {
-        const above = i > 0 ? day.itineraries[i - 1].title : '';
-        const below = i < day.itineraries.length - 1 ? day.itineraries[i + 1].title : '';
-        if (above && below) {
-          item.title = above + ' → ' + below;
-        } else {
-          item.isTravel = false;
-        }
-      }
-    });
-  });
 }
 
 function onMealCheckboxChange(selected) {
