@@ -267,6 +267,7 @@ body {
 
 <!-- Modal template - injected dynamically -->
 <div id="modal-container"></div>
+<input type="file" id="import-file" accept=".json" style="display:none" onchange="importTrips(event)">
 
 <script>
 // =============================================================================
@@ -557,6 +558,8 @@ function renderApp() {
         <span style="font-weight:600;font-size:1.1rem;">Trip Planner</span>
         <button class="btn btn-primary" onclick="createNewTrip()">+ New Trip</button>
         ${savedTrips.length ? tripSelectHtml(null, 'Load Trip...') : ''}
+        <button class="btn btn-sm" onclick="exportTrips()" title="Download all trips as JSON">Export</button>
+        <button class="btn btn-sm" onclick="document.getElementById('import-file').click()" title="Import trips from JSON file">Import</button>
       </div>
       <div class="empty-state empty-state--page">
         <h2>Welcome</h2>
@@ -574,6 +577,8 @@ function renderApp() {
       ${tripSelectHtml(trip.id)}
       <button class="btn btn-sm" onclick="renameTrip()" title="Rename trip">✎</button>
       <button class="btn btn-sm btn-danger" onclick="deleteCurrentTrip()" title="Delete trip">✕</button>
+      <button class="btn btn-sm" onclick="exportTrips()" title="Download all trips as JSON">Export</button>
+      <button class="btn btn-sm" onclick="document.getElementById('import-file').click()" title="Import trips from JSON file">Import</button>
     </div>
     <div class="day-list" id="day-list">
       ${daysHtml}
@@ -603,6 +608,51 @@ function deleteCurrentTrip() {
   if (confirm(`Delete "${state.trip.name}"? This cannot be undone.`)) {
     deleteTrip(state.trip.id);
   }
+}
+
+function exportTrips() {
+  const all = listAllTrips();
+  if (!all.length) { alert('No trips to export.'); return; }
+  const json = JSON.stringify(all, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `trips-${todayStr()}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importTrips(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!Array.isArray(imported)) throw new Error('Invalid format');
+      const existing = listAllTrips();
+      const merged = [...existing];
+      let added = 0;
+      imported.forEach(trip => {
+        if (!trip.id || !trip.name || !trip.days) return;
+        const idx = merged.findIndex(t => t.id === trip.id);
+        if (idx >= 0) {
+          merged[idx] = trip;
+        } else {
+          merged.push(trip);
+          added++;
+        }
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      refreshTripList();
+      renderApp();
+      alert(`Imported ${added} new trip(s), ${imported.length - added} updated.`);
+    } catch (err) {
+      alert('Invalid trip file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
 }
 
 // =============================================================================
