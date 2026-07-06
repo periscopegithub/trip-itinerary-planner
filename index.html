@@ -815,7 +815,7 @@ function openItineraryModal(dayId, itemId) {
     </div>`).join('');
 
   const modalHtml = `
-    <div class="modal-overlay" id="itinerary-modal">
+    <div class="modal-overlay" id="itinerary-modal" data-meal-type="${mealType}">
       <div class="modal" onclick="event.stopPropagation()">
         <div class="modal-header">
           <h3>${isEdit ? 'Edit' : 'Add'} Itinerary</h3>
@@ -829,10 +829,10 @@ function openItineraryModal(dayId, itemId) {
           <div class="form-group">
             <label>Meal</label>
             <div class="meal-checkboxes">
-              <label class="meal-checkbox"><input type="checkbox" id="meal-breakfast" value="breakfast" ${mealType === 'breakfast' ? 'checked' : ''} onchange="onMealCheckboxChange('breakfast')"> Breakfast</label>
-              <label class="meal-checkbox"><input type="checkbox" id="meal-lunch" value="lunch" ${mealType === 'lunch' ? 'checked' : ''} onchange="onMealCheckboxChange('lunch')"> Lunch</label>
-              <label class="meal-checkbox"><input type="checkbox" id="meal-dinner" value="dinner" ${mealType === 'dinner' ? 'checked' : ''} onchange="onMealCheckboxChange('dinner')"> Dinner</label>
-              <label class="meal-checkbox"><input type="checkbox" id="meal-shopping" value="shopping" ${mealType === 'shopping' ? 'checked' : ''} onchange="onMealCheckboxChange('shopping')"> Shopping</label>
+              <label class="meal-checkbox"><input type="checkbox" id="meal-breakfast" value="breakfast" ${mealType === 'breakfast' ? 'checked' : ''} onmousedown="event.preventDefault(); onMealCheckboxChange('breakfast')"> Breakfast</label>
+              <label class="meal-checkbox"><input type="checkbox" id="meal-lunch" value="lunch" ${mealType === 'lunch' ? 'checked' : ''} onmousedown="event.preventDefault(); onMealCheckboxChange('lunch')"> Lunch</label>
+              <label class="meal-checkbox"><input type="checkbox" id="meal-dinner" value="dinner" ${mealType === 'dinner' ? 'checked' : ''} onmousedown="event.preventDefault(); onMealCheckboxChange('dinner')"> Dinner</label>
+              <label class="meal-checkbox"><input type="checkbox" id="meal-shopping" value="shopping" ${mealType === 'shopping' ? 'checked' : ''} onmousedown="event.preventDefault(); onMealCheckboxChange('shopping')"> Shopping</label>
             </div>
           </div>
           <div class="form-row">
@@ -1176,10 +1176,23 @@ async function generateDaySummary(dayId) {
 }
 
 function onMealCheckboxChange(selected) {
+  const form = document.getElementById('itinerary-modal');
+  const prev = form?.dataset?.mealType || '';
+  if (selected === prev) {
+    // Uncheck — clear the selection
+    const el = document.getElementById(`meal-${selected}`);
+    if (el) el.checked = false;
+    form.dataset.mealType = '';
+    return;
+  }
+  form.dataset.mealType = selected;
   ['breakfast', 'lunch', 'dinner', 'shopping'].forEach(type => {
-    const el = document.getElementById(`meal-${type}`);
-    if (el) el.checked = type === selected;
+    const cb = document.getElementById(`meal-${type}`);
+    if (cb) cb.checked = type === selected;
   });
+  // Uncheck travel if meal is selected
+  const travelCb = document.getElementById('meal-travel');
+  if (travelCb) travelCb.checked = false;
 }
 
 function closeModal(modalId) {
