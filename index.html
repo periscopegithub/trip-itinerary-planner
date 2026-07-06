@@ -149,7 +149,8 @@ body {
 .itinerary-item .item-refs a:hover { text-decoration: underline; }
 .itinerary-item .item-actions { display: flex; gap: 4px; flex-shrink: 0; align-items: flex-start; }
 .move-select { font-size: 0.72rem; padding: 2px 4px; border: 1px solid var(--border); border-radius: 3px; background: var(--card); cursor: pointer; max-width: 90px; color: var(--text-secondary); }
-@media print { .move-select { display: none; } }
+.move-day-select { font-size: 0.72rem; padding: 2px 4px; border: 1px solid var(--border); border-radius: 3px; background: var(--card); cursor: pointer; max-width: 95px; color: var(--text-secondary); }
+@media print { .move-select, .move-day-select { display: none; } }
 
 .itinerary-item.meal-breakfast { background: #fff8e1; border-color: #ffe082; }
 .itinerary-item.meal-lunch { background: #fff3e0; border-color: #ffcc80; }
@@ -527,6 +528,7 @@ function renderDay(day, index) {
       <div class="day-header">
         <span class="drag-handle" title="Drag to reorder days">⠿</span>
         <span class="day-label">Day ${index + 1}</span>
+        ${state.trip.days.length > 1 ? `<select class="move-day-select" onchange="if(this.value!=='')moveDayTo('${day.id}',parseInt(this.value))" onclick="event.stopPropagation()"><option value="">Move to...</option>${state.trip.days.map((d,i) => d.id !== day.id ? `<option value="${i}">Day ${i+1}</option>` : '').join('')}</select>` : ''}
         <input type="date" value="${day.date}" onchange="onDayDateChange('${day.id}', this.value)" title="Change date">
         <span class="day-weekday">${formatDate(day.date)}</span>
         <button class="btn btn-sm btn-gen" onclick="generateDaySummary('${day.id}')">${day.summary ? 'Regen' : 'Generate'} Summary</button>
@@ -747,6 +749,17 @@ function deleteDay(dayId) {
   if (!state.trip || state.trip.days.length <= 1) return;
   if (!confirm('Delete this day and all its items?')) return;
   state.trip.days = state.trip.days.filter(d => d.id !== dayId);
+  recalculateDayDates(state.trip.days);
+  saveTrip();
+  renderApp();
+}
+
+function moveDayTo(dayId, targetIndex) {
+  if (!state.trip) return;
+  const currentIndex = state.trip.days.findIndex(d => d.id === dayId);
+  if (currentIndex < 0 || currentIndex === targetIndex) return;
+  const [day] = state.trip.days.splice(currentIndex, 1);
+  state.trip.days.splice(targetIndex, 0, day);
   recalculateDayDates(state.trip.days);
   saveTrip();
   renderApp();
