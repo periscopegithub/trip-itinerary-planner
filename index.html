@@ -147,7 +147,9 @@ body {
 .itinerary-item .item-refs { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
 .itinerary-item .item-refs a { font-size: 0.85rem; color: var(--accent); text-decoration: none; }
 .itinerary-item .item-refs a:hover { text-decoration: underline; }
-.itinerary-item .item-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.itinerary-item .item-actions { display: flex; gap: 4px; flex-shrink: 0; align-items: flex-start; }
+.move-select { font-size: 0.72rem; padding: 2px 4px; border: 1px solid var(--border); border-radius: 3px; background: var(--card); cursor: pointer; max-width: 90px; color: var(--text-secondary); }
+@media print { .move-select { display: none; } }
 
 .itinerary-item.meal-breakfast { background: #fff8e1; border-color: #ffe082; }
 .itinerary-item.meal-lunch { background: #fff3e0; border-color: #ffcc80; }
@@ -471,6 +473,7 @@ function renderItineraryItem(item, dayId) {
         ${refsHtml ? `<div class="item-refs">${refsHtml}</div>` : ''}
       </div>
       <div class="item-actions">
+        ${state.trip.days.length > 1 ? `<select class="move-select" onchange="if(this.value)moveItineraryToDay('${item.id}','${dayId}',this.value)" onclick="event.stopPropagation()"><option value="">Move to...</option>${state.trip.days.map((d,i) => d.id !== dayId ? `<option value="${d.id}">Day ${i+1}</option>` : '').join('')}</select>` : ''}
         <button class="btn-icon btn-sm" title="Edit" onclick="event.stopPropagation(); openItineraryModal('${dayId}', '${item.id}')">✎</button>
         <button class="btn-icon btn-sm" title="Delete" style="color:var(--danger)" onclick="event.stopPropagation(); deleteItinerary('${dayId}', '${item.id}')">✕</button>
       </div>
@@ -941,6 +944,19 @@ function deleteItinerary(dayId, itemId) {
   if (!day) return;
   day.itineraries = day.itineraries.filter(i => i.id !== itemId);
   closeModal('itinerary-modal');
+  saveTrip();
+  renderApp();
+}
+
+function moveItineraryToDay(itemId, fromDayId, toDayId) {
+  if (!state.trip || fromDayId === toDayId) return;
+  const fromDay = state.trip.days.find(d => d.id === fromDayId);
+  const toDay = state.trip.days.find(d => d.id === toDayId);
+  if (!fromDay || !toDay) return;
+  const idx = fromDay.itineraries.findIndex(i => i.id === itemId);
+  if (idx < 0) return;
+  const [item] = fromDay.itineraries.splice(idx, 1);
+  toDay.itineraries.push(item);
   saveTrip();
   renderApp();
 }
