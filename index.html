@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Trip Itinerary Planner</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -242,10 +242,11 @@ body {
 .ref-url-row input { flex: 1; }
 .ref-url-row .btn-icon { flex-shrink: 0; }
 
-/* Sortable ghost */
-.sortable-ghost { opacity: 0.4; }
-.sortable-chosen { box-shadow: var(--shadow-lg); }
-.itinerary-item.sortable-ghost { background: #f0f4ff; }
+/* Drag and drop */
+.itinerary-item.dragging { opacity: 0.4; }
+.day-card.dragging { opacity: 0.4; }
+.itinerary-list.drag-over { background: #f0f4ff; border-radius: 4px; }
+.day-card.drag-over { box-shadow: 0 0 0 2px var(--accent); }
 
 /* Load modal trip list */
 .trip-list-item {
@@ -468,7 +469,7 @@ function renderItineraryItem(item, dayId) {
     : item.mealType ? `<span class="item-meal-tag">${escHtml(item.mealType)}</span>` : '';
 
   return `
-    <div class="itinerary-item${mealClass}${travelClass}" data-id="${item.id}" data-day-id="${dayId}" data-is-travel="${item.isTravel ? '1' : '0'}">
+    <div class="itinerary-item${mealClass}${travelClass}" data-id="${item.id}" data-day-id="${dayId}" data-is-travel="${item.isTravel ? '1' : '0'}" draggable="true" ondragstart="dragStart(event,'${item.id}','${dayId}')" ondragend="dragEnd(event)">
       <span class="drag-handle" title="Drag to reorder">⠿</span>
       <div class="item-content" style="cursor:pointer" onclick="openItineraryModal('${dayId}', '${item.id}')">
         <div class="item-time">${tag} ${escHtml(item.startTime || '--:--')} – ${escHtml(item.endTime || '--:--')}${duration ? ` (${duration})` : ''}</div>
@@ -528,8 +529,8 @@ function renderDay(day, index) {
     </div>` : `<div id="summary-${day.id}"></div>`;
 
   return `
-    <div class="day-card" data-id="${day.id}">
-      <div class="day-header">
+    <div class="day-card" data-id="${day.id}" ondragover="dayDragOver(event)" ondragleave="dayDragLeave(event)" ondrop="dayDrop(event,'${day.id}')">
+      <div class="day-header" draggable="true" ondragstart="dayDragStart(event,'${day.id}')" ondragend="dayDragEnd(event)">
         <span class="drag-handle" title="Drag to reorder days">⠿</span>
         <span class="day-label">Day ${index + 1}</span>
         ${state.trip.days.length > 1 ? `<select class="move-day-select" onchange="if(this.value!=='')moveDayTo('${day.id}',parseInt(this.value))" onclick="event.stopPropagation()"><option value="">Move to...</option>${state.trip.days.map((d,i) => d.id !== day.id ? `<option value="${i}">Day ${i+1}</option>` : '').join('')}</select>` : ''}
@@ -539,7 +540,7 @@ function renderDay(day, index) {
         ${state.trip.days.length > 1 ? `<button class="btn-icon btn-sm" title="Delete day" style="color:var(--danger)" onclick="deleteDay('${day.id}')">✕</button>` : ''}
       </div>
       ${summaryHtml}
-      <div class="itinerary-list" data-day-id="${day.id}">
+      <div class="itinerary-list" data-day-id="${day.id}" ondragover="itinDragOver(event)" ondragleave="itinDragLeave(event)" ondrop="itinDrop(event,'${day.id}')">
         ${itemsHtml}
       </div>
       <button class="add-btn" onclick="openItineraryModal('${day.id}')">+ Add Itinerary</button>
@@ -595,7 +596,6 @@ function renderApp() {
     </div>
     <button class="add-day-btn" style="margin-top:16px" onclick="addDay()">+ Add Day</button>`;
 
-  initSortable();
 }
 
 function onTripSelect(id) {
@@ -669,48 +669,121 @@ function importTrips(event) {
 // SortableJS
 // =============================================================================
 
-function initSortable() {
-  // Day list sorting
-  const dayList = document.getElementById('day-list');
-  if (dayList) {
-    Sortable.create(dayList, {
-      handle: '.day-header .drag-handle',
-      animation: 200,
-      onEnd() {
-        const order = Array.from(dayList.querySelectorAll('.day-card')).map(el => el.dataset.id);
-        const dayMap = {};
-        state.trip.days.forEach(d => { dayMap[d.id] = d; });
-        state.trip.days = order.map(id => dayMap[id]).filter(Boolean);
-        recalculateDayDates(state.trip.days);
-        saveTrip();
-  renderApp();
-      }
-    });
-  }
+// =============================================================================
+// Native Drag and Drop
+// =============================================================================
 
-  // Itinerary list sorting within each day
-  document.querySelectorAll('.itinerary-list').forEach(list => {
-    Sortable.create(list, {
-      handle: '.itinerary-item .drag-handle',
-      animation: 200,
-      group: `itinerary-${list.dataset.dayId}`,
-      onEnd(evt) {
-        const items = evt.to.querySelectorAll('.itinerary-item');
-        if (items.length > 1 && items[0].dataset.isTravel === '1') {
-          evt.to.insertBefore(items[0], items[1]);
-        }
-        const dayId = evt.to.dataset.dayId;
-        const order = Array.from(evt.to.querySelectorAll('.itinerary-item')).map(el => el.dataset.id);
-        const day = state.trip.days.find(d => d.id === dayId);
-        if (!day) return;
-        const itemMap = {};
-        day.itineraries.forEach(item => { itemMap[item.id] = item; });
-        day.itineraries = order.map(id => itemMap[id]).filter(Boolean);
-        saveTrip();
-  renderApp();
-      }
-    });
-  });
+function dragStart(e, itemId, fromDayId) {
+  const el = e.target.closest('.itinerary-item');
+  if (!el || el.dataset.isTravel === '1') {
+    // Prevent travel items from being dragged if they'd end up at position 0 anywhere
+    // Allow drag but flag as travel
+    e.dataTransfer.setData('text/plain', JSON.stringify({ itemId, fromDayId, isTravel: true }));
+  } else {
+    e.dataTransfer.setData('text/plain', JSON.stringify({ itemId, fromDayId, isTravel: false }));
+  }
+  e.dataTransfer.effectAllowed = 'move';
+  el.classList.add('dragging');
+}
+
+function dragEnd(e) {
+  document.querySelectorAll('.dragging, .drag-over').forEach(el => el.classList.remove('dragging', 'drag-over'));
+}
+
+function itinDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+
+function itinDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+function itinDrop(e, toDayId) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  try {
+    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+    if (!data || !data.itemId) return;
+    const fromDay = state.trip.days.find(d => d.id === data.fromDayId);
+    const toDay = state.trip.days.find(d => d.id === toDayId);
+    if (!fromDay || !toDay) return;
+    const idx = fromDay.itineraries.findIndex(i => i.id === data.itemId);
+    if (idx < 0) return;
+    const [item] = fromDay.itineraries.splice(idx, 1);
+    // Prevent travel item at position 0
+    if (data.isTravel && toDay.itineraries.length === 0) {
+      fromDay.itineraries.splice(idx, 0, item);
+      return;
+    }
+    // Insert at the correct position based on drop location
+    const afterEl = getDropAfterElement(e.currentTarget, e.clientY);
+    if (afterEl) {
+      const afterId = afterEl.dataset.id;
+      const afterIdx = toDay.itineraries.findIndex(i => i.id === afterId);
+      toDay.itineraries.splice(afterIdx, 0, item);
+    } else {
+      toDay.itineraries.push(item);
+    }
+    // Prevent travel at position 0
+    if (toDay.itineraries[0]?.isTravel && toDay.itineraries.length > 1) {
+      const [travelItem] = toDay.itineraries.splice(0, 1);
+      toDay.itineraries.splice(1, 0, travelItem);
+    }
+    saveTrip();
+    renderApp();
+  } catch(e) { /* invalid data */ }
+}
+
+function getDropAfterElement(container, y) {
+  const items = [...container.querySelectorAll('.itinerary-item:not(.dragging)')];
+  return items.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) {
+      return { offset: offset, element: child };
+    }
+    return closest;
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+// Day drag and drop
+function dayDragStart(e, dayId) {
+  e.dataTransfer.setData('text/plain', JSON.stringify({ dayId }));
+  e.dataTransfer.effectAllowed = 'move';
+  e.target.closest('.day-card').classList.add('dragging');
+}
+
+function dayDragEnd(e) {
+  document.querySelectorAll('.day-card.dragging, .day-card.drag-over').forEach(el => el.classList.remove('dragging', 'drag-over'));
+}
+
+function dayDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+
+function dayDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+function dayDrop(e, toDayId) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  try {
+    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+    if (!data || !data.dayId || data.dayId === toDayId) return;
+    const fromIdx = state.trip.days.findIndex(d => d.id === data.dayId);
+    const toIdx = state.trip.days.findIndex(d => d.id === toDayId);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const [day] = state.trip.days.splice(fromIdx, 1);
+    state.trip.days.splice(toIdx, 0, day);
+    recalculateDayDates(state.trip.days);
+    saveTrip();
+    renderApp();
+  } catch(e) { /* invalid data */ }
 }
 
 // =============================================================================
