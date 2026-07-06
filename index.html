@@ -694,11 +694,11 @@ function initSortable() {
       handle: '.itinerary-item .drag-handle',
       animation: 200,
       group: `itinerary-${list.dataset.dayId}`,
-      onMove(evt) {
-        if (evt.dragged.dataset.isTravel === '1' && evt.related === list.children[0]) return false;
-        return true;
-      },
       onEnd(evt) {
+        const items = evt.to.querySelectorAll('.itinerary-item');
+        if (items.length > 1 && items[0].dataset.isTravel === '1') {
+          evt.to.insertBefore(items[0], items[1]);
+        }
         const dayId = evt.to.dataset.dayId;
         const order = Array.from(evt.to.querySelectorAll('.itinerary-item')).map(el => el.dataset.id);
         const day = state.trip.days.find(d => d.id === dayId);
