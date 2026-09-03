@@ -29,37 +29,44 @@ export default async function handler(req, res) {
 ${lines.join('\n')}`;
 
   const nvidiaKey = process.env.NVIDIA_API_KEY;
-  const openRouterKey = process.env.OPENROUTER_API_KEY;
 
   const providers = [];
-  if (nvidiaKey) providers.push({
-    name: 'nvidia',
-    url: 'https://integrate.api.nvidia.com/v1/chat/completions',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${nvidiaKey}`,
-      'Accept': 'application/json',
-    },
-    model: 'deepseek-ai/deepseek-v4-flash',
-    body: {
-      model: 'deepseek-ai/deepseek-v4-flash',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 16384,
-      temperature: 1.0,
-      top_p: 0.95,
-      extra_body: { chat_template_kwargs: { thinking: true, reasoning_effort: 'low' } },
-    },
-  });
-  if (openRouterKey) providers.push({
-    name: 'openrouter',
-    url: 'https://openrouter.ai/api/v1/chat/completions',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${openRouterKey}`,
-    },
-    model: 'nvidia/nemotron-3-super-120b-a12b:free',
-    body: { model: 'nvidia/nemotron-3-super-120b-a12b:free', messages: [{ role: 'user', content: prompt }], max_tokens: 2000, temperature: 0.7 },
-  });
+  if (nvidiaKey) {
+    providers.push({
+      name: 'nvidia',
+      url: 'https://integrate.api.nvidia.com/v1/chat/completions',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${nvidiaKey}`,
+        'Accept': 'application/json',
+      },
+      model: 'deepseek-ai/deepseek-v4-flash-0731',
+      body: {
+        model: 'deepseek-ai/deepseek-v4-flash-0731',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 16384,
+        temperature: 1.0,
+        top_p: 0.95,
+        extra_body: { chat_template_kwargs: { thinking: true, reasoning_effort: 'low' } },
+      },
+    });
+    providers.push({
+      name: 'nvidia-fallback',
+      url: 'https://integrate.api.nvidia.com/v1/chat/completions',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${nvidiaKey}`,
+        'Accept': 'application/json',
+      },
+      model: 'nvidia/nemotron-3.5-lightning-30b-a3b',
+      body: {
+        model: 'nvidia/nemotron-3.5-lightning-30b-a3b',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2000,
+        temperature: 0.7,
+      },
+    });
+  }
 
   if (!providers.length) {
     return res.status(500).json({ error: 'No API keys configured' });

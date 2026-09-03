@@ -633,7 +633,7 @@ function renderDay(day, index) {
       </ul>
       <div class="summary-actions">
         <button class="btn btn-sm btn-gen" onclick="generateDaySummary('${day.id}')">Regenerate</button>
-        ${day.summary.provider ? `<span class="summary-provider">via ${day.summary.provider === 'nvidia' ? 'MiniMax M3 (NVIDIA)' : 'Nemotron (OpenRouter)'}</span>` : ''}
+        ${day.summary.provider ? `<span class="summary-provider">via ${day.summary.provider === 'nvidia-fallback' ? 'Nemotron 3.5 Lightning (NVIDIA)' : 'DeepSeek V4 Flash 0731 (NVIDIA)'}</span>` : ''}
       </div>
     </div>` : `<div id="summary-${day.id}"></div>`;
 
@@ -1266,7 +1266,11 @@ async function generateDaySummary(dayId) {
   const btnEl = document.querySelector(`.day-card[data-id="${dayId}"] .btn-gen`);
 
   function setStatus(providerName, label) {
-    const name = providerName === 'nvidia' ? 'DeepSeek V4 Flash (NVIDIA)' : 'Nemotron (OpenRouter)';
+    const map = {
+      'nvidia': 'DeepSeek V4 Flash 0731 (NVIDIA)',
+      'nvidia-fallback': 'Nemotron 3.5 Lightning (NVIDIA)',
+    };
+    const name = map[providerName] || providerName || 'DeepSeek V4 Flash 0731 (NVIDIA)';
     if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = `<span class="spinner"></span> Calling ${name}...`; }
     if (summaryEl) { summaryEl.innerHTML = `<div class="day-summary"><span class="spinner"></span> ${label} via ${name}...</div>`; }
   }
