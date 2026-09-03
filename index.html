@@ -347,62 +347,176 @@ function sanitizeMapCode(code) {
 }
 
 // =============================================================================
-// State
+// State + Server Sync
 // =============================================================================
 
 const STORAGE_KEY = 'trip-planner-trips';
+const PASSPHRASE_KEY = 'trip-planner-passphrase';
+let _serverAvailable = true;
+let _passphrase = null;
+try { _passphrase = localStorage.getItem(PASSPHRASE_KEY) || null; } catch {}
 
-let state = {
-  trip: null,       // current trip object
-  trips: [],        // list of all saved trip summaries
-};
-
-function saveTrip() {
-  if (!state.trip) return;
-  const all = listAllTrips();
-  const idx = all.findIndex(t => t.id === state.trip.id);
-  if (idx >= 0) {
-    all[idx] = { ...state.trip };
-  } else {
-    all.push({ ...state.trip });
-  }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
-  state.trips = all.map(t => ({ id: t.id, name: t.name, dayCount: t.days.length, updatedAt: new Date().toISOString() }));
+function getPassphrase() { return _passphrase; }
+function setPassphrase(v) {
+  _passphrase = v;
+  try { localStorage.setItem(PASSPHRASE_KEY, v); } catch {}
+}
+function clearPassphrase() {
+  _passphrase = null;
+  try { localStorage.removeItem(PASSPHRASE_KEY); } catch {}
 }
 
-function loadTrip(id) {
-  const all = listAllTrips();
+function apiHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  if (_passphrase) h['x-passphrase'] = _passphrase;
+  return h;
+}
+
+async function apiFetch(url, opts = {}) {
+  const res = await fetch(url, {
+    ...opts,
+    headers: { ...apiHeaders(), ...(opts.headers || {}) },
+  });
+  if (res.status === 401) {
+    clearPassphrase();
+    showPassphraseGate('Passphrase incorrect or expired — please re-enter.');
+    throw new Error('Unauthorized');
+  }
+  return res;
+}
+
+// Local cache helpers (fallback + offline)
+function readLocalCache() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; }
+}
+function writeLocalCache(all) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(all)); } catch {}
+}
+
+let state = {
+  trip: null,
+  trips: [],
+};
+
+// Server-backed: save current trip to server + local cache
+async function saveTrip() {
+  if (!state.trip) return;
+  // Always update local cache synchronously for instant UI
+  const cached = readLocalCache();
+  const idx = cached.findIndex(t => t.id === state.trip.id);
+  if (idx >= 0) cached[idx] = { ...state.trip };
+  else cached.push({ ...state.trip });
+  writeLocalCache(cached);
+  state.trips = cached.map(t => ({ id: t.id, name: t.name, dayCount: (t.days||[]).length, updatedAt: t.updatedAt || new Date().toISOString() }));
+  if (!_passphrase || !_serverAvailable) return;
+  try {
+    const res = await apiFetch('/api/trips', { method: 'POST', body: JSON.stringify(state.trip) });
+    if (!res.ok) throw new Error(await res.text());
+  } catch (e) {
+    if (e.message !== 'Unauthorized') console.warn('saveTrip server sync failed:', e.message);
+  }
+}
+
+async function loadTrip(id) {
+  if (_passphrase && _serverAvailable) {
+    try {
+      const res = await apiFetch(`/api/trips/${encodeURIComponent(id)}`);
+      if (res.ok) {
+        const trip = await res.json();
+        state.trip = trip;
+        // update cache
+        const cached = readLocalCache();
+        const idx = cached.findIndex(t => t.id === id);
+        if (idx >= 0) cached[idx] = { ...trip };
+        else cached.push({ ...trip });
+        writeLocalCache(cached);
+        renderApp();
+        return;
+      }
+    } catch (e) {
+      if (e.message === 'Unauthorized') return;
+      console.warn('loadTrip server failed, falling back to cache:', e.message);
+    }
+  }
+  const all = readLocalCache();
   const trip = all.find(t => t.id === id);
   if (trip) {
     state.trip = trip;
     saveTrip();
-  renderApp();
+    renderApp();
   }
 }
 
-function deleteTrip(id) {
-  let all = listAllTrips();
-  all = all.filter(t => t.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
-  state.trips = all.map(t => ({ id: t.id, name: t.name, dayCount: t.days.length, updatedAt: new Date().toISOString() }));
+async function deleteTrip(id) {
+  if (_passphrase && _serverAvailable) {
+    try {
+      const res = await apiFetch(`/api/trips/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!res.ok && res.status !== 404) throw new Error(await res.text());
+    } catch (e) {
+      if (e.message === 'Unauthorized') return;
+      console.warn('deleteTrip server failed:', e.message);
+    }
+  }
+  let cached = readLocalCache();
+  cached = cached.filter(t => t.id !== id);
+  writeLocalCache(cached);
+  state.trips = cached.map(t => ({ id: t.id, name: t.name, dayCount: (t.days||[]).length, updatedAt: t.updatedAt || new Date().toISOString() }));
   if (state.trip && state.trip.id === id) {
     state.trip = null;
-    saveTrip();
-  renderApp();
   }
+  renderApp();
 }
 
 function listAllTrips() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-  } catch {
-    return [];
-  }
+  return readLocalCache();
 }
 
-function refreshTripList() {
-  const all = listAllTrips();
-  state.trips = all.map(t => ({ id: t.id, name: t.name, dayCount: t.days.length, updatedAt: new Date().toISOString() }));
+async function refreshTripList() {
+  if (_passphrase && _serverAvailable) {
+    try {
+      const res = await apiFetch('/api/trips');
+      if (res.ok) {
+        const trips = await res.json();
+        // trips from server are authoritative — replace cache
+        const cachePayload = trips.map(t => ({ id: t.id, name: t.name, days: t.days || [], updatedAt: t.updatedAt }));
+        writeLocalCache(cachePayload);
+        state.trips = trips.map(t => ({ id: t.id, name: t.name, dayCount: t.dayCount ?? (t.days||[]).length, updatedAt: t.updatedAt }));
+        return;
+      }
+    } catch (e) {
+      if (e.message === 'Unauthorized') return;
+      console.warn('refreshTripList server failed:', e.message);
+    }
+    // server unreachable — mark unavailable briefly, fall back to cache
+    _serverAvailable = false;
+    setTimeout(() => { _serverAvailable = true; }, 30000);
+  }
+  const cached = readLocalCache();
+  state.trips = cached.map(t => ({ id: t.id, name: t.name, dayCount: (t.days||[]).length, updatedAt: t.updatedAt || new Date().toISOString() }));
+}
+
+// One-time migration: push any local-only trips to server after auth
+async function migrateLocalToServer() {
+  if (!_passphrase || !_serverAvailable) return;
+  const cached = readLocalCache();
+  if (!cached.length) return;
+  try {
+    const res = await apiFetch('/api/trips');
+    if (!res.ok) return;
+    const serverTrips = await res.json();
+    const serverIds = new Set(serverTrips.map(t => t.id));
+    const toUpload = cached.filter(t => !serverIds.has(t.id));
+    for (const trip of toUpload) {
+      await apiFetch('/api/trips', { method: 'POST', body: JSON.stringify(trip) });
+    }
+    if (toUpload.length) {
+      console.log(`Migrated ${toUpload.length} local trip(s) to server`);
+      await refreshTripList();
+      renderApp();
+    }
+  } catch (e) {
+    if (e.message !== 'Unauthorized') console.warn('migrateLocalToServer failed:', e.message);
+  }
 }
 
 // =============================================================================
@@ -547,7 +661,11 @@ function renderDay(day, index) {
 function renderApp() {
   const app = document.getElementById('app');
 
-  refreshTripList();
+  // keep trip summaries in sync from cache (server sync happens async elsewhere)
+  if (!state.trips.length) {
+    const cached = readLocalCache();
+    state.trips = cached.map(t => ({ id: t.id, name: t.name, dayCount: (t.days||[]).length, updatedAt: t.updatedAt || new Date().toISOString() }));
+  }
   const savedTrips = state.trips;
   const tripSelectHtml = (selectedId, placeholder) => {
     const opts = savedTrips.map(t => `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${escHtml(t.name)}</option>`).join('');
@@ -557,6 +675,13 @@ function renderApp() {
     return `<select class="trip-select" onchange="onTripSelect(this.value)">${opts}</select>`;
   };
 
+  const syncBadge = _passphrase
+    ? (_serverAvailable ? '<span style="font-size:0.75rem;color:#16a34a" title="Synced to server">● Synced</span>' : '<span style="font-size:0.75rem;color:#ca8a04" title="Offline — using local cache">● Offline</span>')
+    : '<span style="font-size:0.75rem;color:#999" title="Not synced — enter passphrase to enable">○ Local only</span>';
+  const syncBtn = _passphrase
+    ? `<button class="btn btn-sm" onclick="changePassphrase()" title="Change passphrase">${syncBadge}</button>`
+    : `<button class="btn btn-sm" onclick="showPassphraseGate()" title="Enter passphrase to sync">${syncBadge}</button>`;
+
   if (!state.trip) {
     app.innerHTML = `
       <div class="toolbar">
@@ -565,6 +690,7 @@ function renderApp() {
         ${savedTrips.length ? tripSelectHtml(null, 'Load Trip...') : ''}
         <button class="btn btn-sm" onclick="exportTrips()" title="Download all trips as JSON">Export</button>
         <button class="btn btn-sm" onclick="document.getElementById('import-file').click()" title="Import trips from JSON file">Import</button>
+        ${syncBtn}
       </div>
       <div class="empty-state empty-state--page">
         <h2>Welcome</h2>
@@ -584,6 +710,7 @@ function renderApp() {
       <button class="btn btn-sm btn-danger" onclick="deleteCurrentTrip()" title="Delete trip">✕</button>
       <button class="btn btn-sm" onclick="exportTrips()" title="Download all trips as JSON">Export</button>
       <button class="btn btn-sm" onclick="document.getElementById('import-file').click()" title="Import trips from JSON file">Import</button>
+      ${syncBtn}
     </div>
     <div class="day-list" id="day-list">
       ${daysHtml}
@@ -627,29 +754,34 @@ function exportTrips() {
   URL.revokeObjectURL(a.href);
 }
 
-function importTrips(event) {
+async function importTrips(event) {
   const file = event.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = async function(e) {
     try {
       const imported = JSON.parse(e.target.result);
       if (!Array.isArray(imported)) throw new Error('Invalid format');
-      const existing = listAllTrips();
+      const existing = readLocalCache();
       const merged = [...existing];
       let added = 0;
       imported.forEach(trip => {
         if (!trip.id || !trip.name || !trip.days) return;
         const idx = merged.findIndex(t => t.id === trip.id);
-        if (idx >= 0) {
-          merged[idx] = trip;
-        } else {
-          merged.push(trip);
-          added++;
-        }
+        if (idx >= 0) merged[idx] = trip;
+        else { merged.push(trip); added++; }
       });
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-      refreshTripList();
+      writeLocalCache(merged);
+      // push to server if authenticated
+      if (_passphrase && _serverAvailable) {
+        for (const trip of imported) {
+          if (!trip.id || !trip.name || !trip.days) continue;
+          try { await apiFetch('/api/trips', { method: 'POST', body: JSON.stringify(trip) }); } catch {}
+        }
+        await refreshTripList();
+      } else {
+        state.trips = merged.map(t => ({ id: t.id, name: t.name, dayCount: (t.days||[]).length, updatedAt: t.updatedAt || new Date().toISOString() }));
+      }
       renderApp();
       alert(`Imported ${added} new trip(s), ${imported.length - added} updated.`);
     } catch (err) {
@@ -1110,14 +1242,14 @@ function openLoadModal() {
 
 }
 
-function loadTripAndClose(id) {
-  loadTrip(id);
+async function loadTripAndClose(id) {
   closeModal('load-modal');
+  await loadTrip(id);
 }
 
-function deleteTripAndRefresh(id) {
+async function deleteTripAndRefresh(id) {
   if (!confirm('Delete this saved trip?')) return;
-  deleteTrip(id);
+  await deleteTrip(id);
   openLoadModal();
 }
 
@@ -1231,11 +1363,117 @@ document.addEventListener('keydown', function(e) {
 });
 
 // =============================================================================
+// Passphrase gate
+// =============================================================================
+
+function showPassphraseGate(message) {
+  const msg = message ? `<div style="color:var(--danger);font-size:0.85rem;margin-bottom:10px">${escHtml(message)}</div>` : '';
+  const modalHtml = `
+    <div class="modal-overlay" id="passphrase-gate" style="z-index:2000">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:420px">
+        <div class="modal-header"><h3>Enter passphrase</h3></div>
+        <div class="modal-body">
+          ${msg}
+          <div class="form-group">
+            <label>Passphrase</label>
+            <input type="password" id="gate-passphrase" placeholder="Enter passphrase to access trips" autocomplete="current-password">
+            <div class="hint">Trips are stored centrally. Enter the passphrase to sync across devices.</div>
+          </div>
+          <div id="gate-error" style="color:var(--danger);font-size:0.85rem;display:none;margin-top:6px"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="continueWithoutSync()">Continue offline</button>
+          <button class="btn btn-primary" id="gate-submit">Unlock</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modal-container').innerHTML = modalHtml;
+  const input = document.getElementById('gate-passphrase');
+  const submit = document.getElementById('gate-submit');
+  const errorEl = document.getElementById('gate-error');
+  async function tryAuth() {
+    const val = input.value.trim();
+    if (!val) { errorEl.textContent = 'Please enter a passphrase.'; errorEl.style.display = 'block'; return; }
+    submit.disabled = true;
+    submit.innerHTML = '<span class="spinner"></span> Checking...';
+    try {
+      const res = await fetch('/api/auth-check', { headers: { 'x-passphrase': val } });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      setPassphrase(val);
+      _serverAvailable = true;
+      closeModal('passphrase-gate');
+      await refreshTripList();
+      await migrateLocalToServer();
+      renderApp();
+    } catch (e) {
+      errorEl.textContent = e.message.includes('401') || e.message.includes('Unauthorized') ? 'Incorrect passphrase.' : e.message;
+      errorEl.style.display = 'block';
+      submit.disabled = false;
+      submit.textContent = 'Unlock';
+    }
+  }
+  submit.addEventListener('click', tryAuth);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryAuth(); });
+  setTimeout(() => input.focus(), 50);
+}
+
+function continueWithoutSync() {
+  closeModal('passphrase-gate');
+  _serverAvailable = false;
+  renderApp();
+}
+
+function ensurePassphraseGate() {
+  if (_passphrase) return false;
+  showPassphraseGate();
+  return true;
+}
+
+// Add "Switch passphrase" helper in toolbar via global
+function changePassphrase() {
+  showPassphraseGate('Enter new passphrase to switch account.');
+}
+
+// =============================================================================
 // Init
 // =============================================================================
 
-refreshTripList();
-renderApp();
+(async function boot() {
+  // Show gate if no passphrase stored — user can also continue offline
+  if (!_passphrase) {
+    // Try to render cached trips immediately, then show gate
+    const cached = readLocalCache();
+    state.trips = cached.map(t => ({ id: t.id, name: t.name, dayCount: (t.days||[]).length, updatedAt: t.updatedAt || new Date().toISOString() }));
+    renderApp();
+    showPassphraseGate();
+    return;
+  }
+  // Has passphrase — verify and sync
+  try {
+    const res = await fetch('/api/auth-check', { headers: { 'x-passphrase': _passphrase } });
+    if (!res.ok) throw new Error('Unauthorized');
+    _serverAvailable = true;
+    await refreshTripList();
+    await migrateLocalToServer();
+  } catch (e) {
+    if (e.message.includes('Unauthorized') || e.message === 'Unauthorized') {
+      clearPassphrase();
+      const cached = readLocalCache();
+      state.trips = cached.map(t => ({ id: t.id, name: t.name, dayCount: (t.days||[]).length, updatedAt: t.updatedAt || new Date().toISOString() }));
+      renderApp();
+      showPassphraseGate('Stored passphrase was rejected — please re-enter.');
+      return;
+    }
+    console.warn('boot server sync failed:', e.message);
+    _serverAvailable = false;
+    setTimeout(() => { _serverAvailable = true; }, 30000);
+    await refreshTripList();
+  }
+  renderApp();
+})();
 </script>
 </body>
 </html>

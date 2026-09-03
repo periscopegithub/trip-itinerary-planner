@@ -2,6 +2,15 @@
   "functions": {
     "api/generate-day-summary.js": {
       "maxDuration": 30
+    },
+    "api/trips.js": {
+      "maxDuration": 10
+    },
+    "api/trips/[id].js": {
+      "maxDuration": 10
+    },
+    "api/auth-check.js": {
+      "maxDuration": 5
     }
   }
 }
