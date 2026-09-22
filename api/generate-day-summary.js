@@ -40,9 +40,9 @@ ${lines.join('\n')}`;
         'Authorization': `Bearer ${nvidiaKey}`,
         'Accept': 'application/json',
       },
-      model: 'deepseek-ai/deepseek-v4-flash-0731',
+      model: 'z-ai/glm-5.3-flash',
       body: {
-        model: 'deepseek-ai/deepseek-v4-flash-0731',
+        model: 'z-ai/glm-5.3-flash',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 16384,
         temperature: 1.0,
