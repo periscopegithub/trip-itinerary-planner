@@ -40,9 +40,9 @@ ${lines.join('\n')}`;
         'Authorization': `Bearer ${nvidiaKey}`,
         'Accept': 'application/json',
       },
-      model: 'z-ai/glm-5.3-flash',
+      model: 'meta/muse-glimmer-30b',
       body: {
-        model: 'z-ai/glm-5.3-flash',
+        model: 'meta/muse-glimmer-30b',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 2000,
         temperature: 0.7,
